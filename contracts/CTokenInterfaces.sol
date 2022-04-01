@@ -28,7 +28,7 @@ contract CTokenStorage {
     /**
      * @notice Maximum borrow rate that can ever be applied (.0005% / block)
      */
-
+    //每块的最大借贷利率 2102400块/年 = 1051.2e18 这个数值还是比较大的
     uint internal constant borrowRateMaxMantissa = 0.0005e16;
 
     /**
@@ -44,6 +44,7 @@ contract CTokenStorage {
     /**
      * @notice Pending administrator for this contract
      */
+    //设置新的admin 生效前的临时变量
     address payable public pendingAdmin;
 
     /**
@@ -59,11 +60,14 @@ contract CTokenStorage {
     /**
      * @notice Initial exchange rate used when minting the first CTokens (used when totalSupply = 0)
      */
+    //初始的兑换率
+    //exchangeRate = (totalCash + totalBorrows - totalReserves) / totalSupply
     uint internal initialExchangeRateMantissa;
 
     /**
      * @notice Fraction of interest currently set aside for reserves
      */
+    //储备金率
     uint public reserveFactorMantissa;
 
     /**
@@ -74,21 +78,25 @@ contract CTokenStorage {
     /**
      * @notice Accumulator of the total earned interest rate since the opening of the market
      */
+    //借款指数　不知道干什么用的？？
     uint public borrowIndex;
 
     /**
      * @notice Total amount of outstanding borrows of the underlying in this market
      */
+    //总共借出本币的数量
     uint public totalBorrows;
 
     /**
      * @notice Total amount of reserves of the underlying held in this market
      */
+    //总共储备的本币的数量
     uint public totalReserves;
 
     /**
      * @notice Total number of tokens in circulation
      */
+    //发行的代币数量
     uint public totalSupply;
 
     /**
@@ -114,11 +122,13 @@ contract CTokenStorage {
     /**
      * @notice Mapping of account addresses to outstanding borrow balances
      */
+    //??
     mapping(address => BorrowSnapshot) internal accountBorrows;
 
     /**
      * @notice Share of seized collateral that is added to reserves
      */
+    //??
     uint public constant protocolSeizeShareMantissa = 2.8e16; //2.8%
 
 }
@@ -257,15 +267,23 @@ contract CErc20Storage {
 contract CErc20Interface is CErc20Storage {
 
     /*** User Interface ***/
-
+    //存款，将要能够和的标的资产转入cToken合约中，并根据最新的兑换率将对应的cToken代币转到用户钱包地址
     function mint(uint mintAmount) external returns (uint);
+    //赎回存款，即用cToken换回标的资产　根据最新的兑换率兑换
     function redeem(uint redeemTokens) external returns (uint);
+    //赎回存款，指定赎回的标的资产的数量
     function redeemUnderlying(uint redeemAmount) external returns (uint);
+    //借款，根据用户的抵押物来计算可借额度
     function borrow(uint borrowAmount) external returns (uint);
+    //还款，当指定金额为-1时，表示全额还款
     function repayBorrow(uint repayAmount) external returns (uint);
+    //代还款
     function repayBorrowBehalf(address borrower, uint repayAmount) external returns (uint);
+    //清算，清算人会得到清算奖励
     function liquidateBorrow(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) external returns (uint);
     function sweepToken(EIP20NonStandardInterface token) external;
+
+    //以上函数都会调用 accrueInterest() 函数计算新的利息
 
 
     /*** Admin Functions ***/

@@ -31,22 +31,25 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         require(msg.sender == admin, "only admin may initialize the market");
         require(accrualBlockNumber == 0 && borrowIndex == 0, "market may only be initialized once");
 
-        // Set initial exchange rate
+        // Set initial exchange rate　1 设置初始的兑换率
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(initialExchangeRateMantissa > 0, "initial exchange rate must be greater than zero.");
 
-        // Set the comptroller
+        // Set the comptroller　２设置comptroller
         uint err = _setComptroller(comptroller_);
         require(err == uint(Error.NO_ERROR), "setting comptroller failed");
 
         // Initialize block number and borrow index (block number mocks depend on comptroller being set)
+        // 3 初始化 开始块高和借款指数
         accrualBlockNumber = getBlockNumber();
         borrowIndex = mantissaOne;
 
         // Set the interest rate model (depends on block number / borrow index)
+        // 4 设置利率类对象
         err = _setInterestRateModelFresh(interestRateModel_);
         require(err == uint(Error.NO_ERROR), "setting interest rate model failed");
 
+        //5 设置Erc20 token的3个变量
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
@@ -187,6 +190,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @param owner The address of the account to query
      * @return The amount of underlying owned by `owner`
      */
+    // 根据兑换比例看自己可以赎回原生币的数量
     function balanceOfUnderlying(address owner) external returns (uint) {
         Exp memory exchangeRate = Exp({mantissa: exchangeRateCurrent()});
         (MathError mErr, uint balance) = mulScalarTruncate(exchangeRate, accountTokens[owner]);
@@ -201,17 +205,18 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @return (possible error, token balance, borrow balance, exchange rate mantissa)
      */
     function getAccountSnapshot(address account) external view returns (uint, uint, uint, uint) {
+        // 1 获取代币token的数量
         uint cTokenBalance = accountTokens[account];
         uint borrowBalance;
         uint exchangeRateMantissa;
 
         MathError mErr;
-
+        //　２　获取计算利息后的借贷金额
         (mErr, borrowBalance) = borrowBalanceStoredInternal(account);
         if (mErr != MathError.NO_ERROR) {
             return (uint(Error.MATH_ERROR), 0, 0, 0);
         }
-
+        // 兑换比例
         (mErr, exchangeRateMantissa) = exchangeRateStoredInternal();
         if (mErr != MathError.NO_ERROR) {
             return (uint(Error.MATH_ERROR), 0, 0, 0);
@@ -232,6 +237,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current per-block borrow interest rate for this cToken
      * @return The borrow interest rate per block, scaled by 1e18
      */
+    // 获取借款利率
     function borrowRatePerBlock() external view returns (uint) {
         return interestRateModel.getBorrowRate(getCashPrior(), totalBorrows, totalReserves);
     }
@@ -240,6 +246,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current per-block supply interest rate for this cToken
      * @return The supply interest rate per block, scaled by 1e18
      */
+    // 存款利率
     function supplyRatePerBlock() external view returns (uint) {
         return interestRateModel.getSupplyRate(getCashPrior(), totalBorrows, totalReserves, reserveFactorMantissa);
     }
@@ -248,6 +255,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current total borrows plus accrued interest
      * @return The total borrows with interest
      */
+    // 总的借款金额，包含产生的利息
     function totalBorrowsCurrent() external nonReentrant returns (uint) {
         require(accrueInterest() == uint(Error.NO_ERROR), "accrue interest failed");
         return totalBorrows;
@@ -279,6 +287,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @param account The address whose balance should be calculated
      * @return (error code, the calculated balance or 0 if error code is non-zero)
      */
+    //根据保存的用户借贷金额＋借贷因子　获取累积后的需要还的金额
     function borrowBalanceStoredInternal(address account) internal view returns (MathError, uint) {
         /* Note: we do not assert that the market is up to date */
         MathError mathErr;
@@ -315,6 +324,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @notice Accrue interest then return the up-to-date exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
+    // 兑换率
     function exchangeRateCurrent() public nonReentrant returns (uint) {
         require(accrueInterest() == uint(Error.NO_ERROR), "accrue interest failed");
         return exchangeRateStored();
@@ -336,6 +346,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
      * @dev This function does not accrue interest before calculating the exchange rate
      * @return (error code, calculated exchange rate scaled by 1e18)
      */
+    //获取兑换比列
     function exchangeRateStoredInternal() internal view returns (MathError, uint) {
         uint _totalSupply = totalSupply;
         if (_totalSupply == 0) {
@@ -387,6 +398,7 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint accrualBlockNumberPrior = accrualBlockNumber;
 
         /* Short-circuit accumulating 0 interest */
+        //计算过的话则不再计算
         if (accrualBlockNumberPrior == currentBlockNumber) {
             return uint(Error.NO_ERROR);
         }
@@ -398,10 +410,12 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint borrowIndexPrior = borrowIndex;
 
         /* Calculate the current borrow interest rate */
+        // 获取借款利率
         uint borrowRateMantissa = interestRateModel.getBorrowRate(cashPrior, borrowsPrior, reservesPrior);
         require(borrowRateMantissa <= borrowRateMaxMantissa, "borrow rate is absurdly high");
 
         /* Calculate the number of blocks elapsed since the last accrual */
+        // 获取当前块高跟上次计算完的块高差
         (MathError mathErr, uint blockDelta) = subUInt(currentBlockNumber, accrualBlockNumberPrior);
         require(mathErr == MathError.NO_ERROR, "could not calculate block delta");
 
@@ -420,26 +434,31 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
         uint totalReservesNew;
         uint borrowIndexNew;
 
+        //累计的快高利率
         (mathErr, simpleInterestFactor) = mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_SIMPLE_INTEREST_FACTOR_CALCULATION_FAILED, uint(mathErr));
         }
 
+        //计算产生的借款利息
         (mathErr, interestAccumulated) = mulScalarTruncate(simpleInterestFactor, borrowsPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_ACCUMULATED_INTEREST_CALCULATION_FAILED, uint(mathErr));
         }
 
+        //将借款利息累加到总的借款中
         (mathErr, totalBorrowsNew) = addUInt(interestAccumulated, borrowsPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_BORROWS_CALCULATION_FAILED, uint(mathErr));
         }
 
+        //获取的利息中 一部分应该放到储备金中，累加上
         (mathErr, totalReservesNew) = mulScalarTruncateAddUInt(Exp({mantissa: reserveFactorMantissa}), interestAccumulated, reservesPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_TOTAL_RESERVES_CALCULATION_FAILED, uint(mathErr));
         }
 
+        //新的借款因子　borrowIndexNew = simpleInterestFactor * borrowIndex + borrowIndex
         (mathErr, borrowIndexNew) = mulScalarTruncateAddUInt(simpleInterestFactor, borrowIndexPrior, borrowIndexPrior);
         if (mathErr != MathError.NO_ERROR) {
             return failOpaque(Error.MATH_ERROR, FailureInfo.ACCRUE_INTEREST_NEW_BORROW_INDEX_CALCULATION_FAILED, uint(mathErr));
@@ -1179,6 +1198,8 @@ contract CToken is CTokenInterface, Exponential, TokenErrorReporter {
       * @dev Admin function to set a new comptroller
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
+    // 1 验证调用者为admin
+    // 2 newComptroller 必须为　ComptrollerInterface　感觉还是有一定的必要的
     function _setComptroller(ComptrollerInterface newComptroller) public returns (uint) {
         // Check caller is admin
         if (msg.sender != admin) {
